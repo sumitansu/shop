@@ -1,0 +1,6 @@
+{
+  "name": "CloudSecure Platform & Vercel Portal",
+  "description": "Secure web platform featuring Firebase Firestore database persistence, Firebase Authentication, Zero-Trust data isolation, and Vercel free-tier deployment configuration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
