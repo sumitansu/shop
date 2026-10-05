@@ -13,6 +13,14 @@
 
 | Date & Time (UTC) | Author | Scope / Task | Files Modified / Added | Summary of Changes |
 | :--- | :--- | :--- | :--- | :--- |
+| 2026-10-05 20:25 | AI Assistant | Security Pass Stage 8: Shop Security Directives & Rules Engine | `src/types/shop.ts`, `api/_shopRules.ts`, `api/_app.ts`, `README.md` | Enshrined non-negotiable Phase 2 security contracts: created server-authoritative pricing and allow-list engine (`api/_shopRules.ts`, `src/types/shop.ts`); prices, itemized costs, and totals are computed strictly server-side with zero trust in client values; options validated against strict hardware compatibility rules (V1 incompatible with wireless control; V1 fixed at 2 antennas; module/antenna type pairing); order IDs generated cryptographically server-side (`ORD-...`); enforced hosted payment compliance rejecting credit card data payloads; mounted `/api/shop/calculate-bill` endpoint. |
+| 2026-10-05 20:20 | AI Assistant | Security Pass Stage 7: Performance & Code-Splitting | `src/App.tsx`, `README.md` | Code-split and lazy-loaded all 12 React Bits intro typography components (`TechText`, `FoldText`, `ParticleText`, `StrokeText`, `Shuffle`, `ScrambledText`, `TextType`, `RotatingText`, `TextPressure`, `DecryptedText`, `BlurText`, `SplitText`) using dynamic `React.lazy` and wrapped in `<Suspense>` with zero-layout-shift bounding fallback. Eliminated heavy upfront JS bundle bloat so the browser downloads exclusively the single selected RNG animation chunk on page load, drastically lowering initial payload and TTI. |
+| 2026-10-05 20:15 | AI Assistant | Security Pass Stage 6: Demo Code & Unused Route Cleanup | `package.json`, `api/_app.ts`, `api/_validation.ts`, `src/types/index.ts`, `README.md`, Deleted: `src/components/BlobTab.tsx`, `DatabaseTab.tsx`, `SupabaseTab.tsx`, `VercelGuideTab.tsx`, `ChangelogTab.tsx`, `SystemDrawer.tsx`, `OverviewTab.tsx`, `AuthTab.tsx`, `CleanHome.tsx`, `Navbar.tsx`, `api/posts.ts`, `api/todos.ts` | Removed all demo explorer tabs and leftover UI (`BlobTab`, `DatabaseTab`, `SupabaseTab`, `VercelGuideTab`, `ChangelogTab`, `SystemDrawer`, `OverviewTab`, `AuthTab`, `CleanHome`, `Navbar`); eliminated obsolete demo route handlers and schemas (`/api/db/*`, `/api/supabase/*`, `/api/posts*`, `/api/todos*`, `/api/system/health`, `/api/blob/status`) while retaining core Quad-Storage Blob endpoints and database connection clients; removed deleted serverless function files `api/posts.ts` and `api/todos.ts`; pruned unused dependency `@google/genai` from `package.json`; cleaned demo interfaces from `src/types/index.ts`. |
+| 2026-10-05 20:10 | AI Assistant | Security Pass Stage 5: Enterprise Headers & CSP Hardening | `vercel.json`, `README.md` | Configured strict enterprise security headers in `vercel.json`: added Content-Security-Policy (CSP) restricting execution strictly to `'self'`, Firebase (`googleapis.com`, `firebaseio.com`, `firebaseapp.com`), Supabase (`supabase.co`, `wss://*.supabase.co`), and Vercel Analytics (`va.vercel-scripts.com`, `vitals.vercel-insights.com`); removed deprecated `X-XSS-Protection`; added `Strict-Transport-Security` (HSTS: `max-age=63072000; includeSubDomains; preload`); configured `Cross-Origin-Opener-Policy: same-origin-allow-popups` to support Firebase Auth popup sign-in flows without cross-origin severing; validated Stages 1 through 4. |
+| 2026-10-05 20:05 | AI Assistant | Security Pass Stage 4: Secrets, Keys & Supabase RLS | `src/lib/supabase.ts`, `api/_app.ts`, `api/_validation.ts`, `migrations/001_init.sql`, `migrations/002_supabase_rls.sql`, `firestore.rules`, `firebase-blueprint.json`, `src/components/SystemDrawer.tsx`, `src/components/OverviewTab.tsx`, `README.md` | Eradicated the vault feature and all secrets from app databases (dropped `vault_secrets` endpoints `/api/vault/*`, validation, schema definitions, and Firestore `/vault` collection); removed hardcoded fallback Supabase URL and anon key from `src/lib/supabase.ts` enforcing strict environment-only reading and loud runtime exceptions; guaranteed `SUPABASE_SERVICE_ROLE_KEY` is server-only (never exposed to client) and updated backend Supabase helpers to prefer anon key + RLS; created `migrations/002_supabase_rls.sql` providing SQL that enforces Row Level Security (RLS) on all Supabase tables (`todos`, `posts`) with explicit default-deny policies, service role bypass, and ownership enforcement; deployed cleaned ABAC rules to Firestore. |
+| 2026-10-05 20:00 | AI Assistant | Security Pass Stage 3: Unified Handlers & SQL Migrations | `api/_app.ts`, `api/[...path].ts`, `api/blob.ts`, `api/posts.ts`, `api/todos.ts`, `server.ts`, `vercel.json`, `migrations/001_init.sql`, `README.md` | Eliminated Vercel deployment mismatch and all route duplication between `server.ts` and `api/*` by building a single unified Express application (`api/_app.ts`); configured Vercel serverless catch-all `api/[...path].ts` and rewrote `/api/(.*)` in `vercel.json`; created one-time SQL migration `migrations/001_init.sql` and eradicated runtime `CREATE TABLE IF NOT EXISTS` queries from all request handlers. |
+| 2026-10-05 19:54 | AI Assistant | Security Pass Stage 2: Stop Leaks & Abuse | `server.ts`, `api/_validation.ts`, `api/blob.ts`, `api/posts.ts`, `api/todos.ts`, `package.json`, `README.md` | Eliminated raw `err.message` exposure across all endpoints with server-side error logging and sanitized client responses; enforced universal input validation (title <=150, content <=10k, id constraints, secret sizing); reduced global body parser limit to 100kb with a dedicated 5MB cap on `/api/blob/upload`; hardened blob storage with pathname sanitization (only `[a-z0-9/_.-]`, no `..`, no leading `/`), forced `access: 'private'`, and allow-listed MIME types (png, jpeg, webp, pdf, strictly blocking html/svg); implemented rate limiting via `express-rate-limit` (100 req/15min general, 30 req/15min mutations). |
+| 2026-10-05 19:48 | AI Assistant | Security Pass Stage 1: API Lockdown (Critical) | `server.ts`, `api/_auth.ts`, `api/blob.ts`, `api/posts.ts`, `api/todos.ts`, `.env.example`, `README.md` | Locked down all API routes in `server.ts` and `api/*`: enforced valid Firebase ID token verification (Authorization: Bearer) returning 401 on unauthorized requests via `jose` Web Crypto JWKS; guarded all admin-only routes (blob upload/list/delete, db init/delete, all vault routes, status/health endpoints) with strict `ADMIN_UID` check returning 403 on mismatch; removed hardcoded Blob store ID from `server.ts` and `README.md`. |
 | 2026-10-05 19:37 | AI Assistant | Low-End Device Shader Optimization (Stages 1 & 2) | `src/App.tsx`, `src/components/GradientWaves.tsx`, `README.md` | Completed Stage 1 & Stage 2 optimizations for `<GradientWaves />`: lazy-loaded the WebGL component in `App.tsx` with `React.lazy` and `Suspense` to unblock page load/TTI while preserving auto-pause logic; capped renderer device pixel ratio in `GradientWaves.tsx` to `Math.min(window.devicePixelRatio || 1, 1)` to eliminate up to 75% fragment shader raymarching overhead on high-DPI/Retina mobile screens. |
 | 2026-10-04 21:50 | AI Assistant | Visual Typography Harmonization & Scale Lock | `src/components/ScrambledText.tsx`, `src/components/TextPressure.tsx`, `src/App.tsx`, `README.md` | Calibrated and locked uniform responsive typography scale (`text-4xl sm:text-6xl md:text-7xl lg:text-8xl font-black`) across all 11 RNG intro components. Fixed ScrambledText root size constraint, clamped TextPressure to 86px max desktop scale, and unified viewport container heights and baselines to eliminate layout jitter. |
 | 2026-10-04 21:47 | AI Assistant | Phase 1.2 Intro Animations Complete & Progress Stamped | `README.md` | Formal milestone sign-off and progress stamp for Phase 1.2 (Intro Typography & 11-Animation RNG Suite). Verified all 11 React Bits components, zero build/type warnings, clean dark viewport presentation for "DoRaemon's Shop", and queued Phase 2 (Product Catalog & Currency Conversion). |
@@ -368,16 +376,62 @@ When deploying to Vercel, configure these in **Project Settings > Environment Va
 - `SUPABASE_ANON_KEY`: Supabase anon public key
 - `SUPABASE_SERVICE_ROLE_KEY`: Supabase service role key
 - `BLOB_READ_WRITE_TOKEN`: Vercel Blob token (`vercel_blob_rw_...`)
-- `BLOB_STORE_ID`: `store_Ai7bFlevUBpVJohX`
+- `BLOB_STORE_ID`: Vercel Blob store identifier (from Vercel dashboard)
+- `ADMIN_UID`: Firebase Auth UID of authorized administrator(s) (for admin-only routes)
+- `FIREBASE_PROJECT_ID`: Firebase project identifier (`gen-lang-client-0174410808`)
+
+---
+
+## 🛡️ Security + Cleanup Master Pass ("DoRaemon's Shop")
+
+> **Current Review & Progress Tracking (Work in Stages, ONE at a time):**
+
+- [x] **STAGE 1 - Lock down the API (critical) [COMPLETED]**
+  - Require a verified Firebase ID token (`Authorization: Bearer <token>`) on every route in `server.ts` and `api/*`. Return 401 otherwise.
+  - Admin-only routes (blob upload/list/delete, db init/delete, all vault routes): also require `uid` to match an `ADMIN_UID` env var, else 403.
+  - Delete or make admin-only: `/api/db/status`, `/api/blob/status`, `/api/system/health`, `/api/supabase/status`.
+  - Removed the hardcoded Blob store ID from `server.ts` and `README.md`.
+- [x] **STAGE 2 - Stop leaks and abuse [COMPLETED]**
+  - Never return `err.message` to clients: logged all errors server-side and returned uniform, masked error payloads (`Internal server error`, `Failed to retrieve ...`).
+  - Strict input validation: enforced lengths & types on all routes (`title` <= 150, `content` <= 10,000, `author` <= 100, `is_complete` boolean, `id` regex/size guards, secret payload limits).
+  - Body parser limits: clamped global JSON/urlencoded parsing to 100kb; configured dedicated 5MB cap strictly for `/api/blob/upload`.
+  - Blob hardening: sanitized pathnames (only `[a-z0-9/_.-]`, no `..`, no leading `/`), enforced `access: 'private'` unconditionally, allow-listed MIME types (`image/png`, `image/jpeg`, `image/webp`, `application/pdf`), and strictly rejected `text/html`, `image/svg+xml`, scripts, and unapproved types.
+  - Rate limiting: configured `express-rate-limit` with general window (100 req/15min) on `/api` and mutation limiter (30 req/15min) on writes/uploads/admin routes.
+- [x] **STAGE 3 - Fix Vercel deployment mismatch [COMPLETED]**
+  - Unified API Handlers: built ONE consolidated Express app in `api/_app.ts` shared 100% by both local dev (`server.ts`) and Vercel serverless deployment (`api/[...path].ts`, `api/blob.ts`, `api/posts.ts`, `api/todos.ts`).
+  - Rewrites & Routing: added `/api/(.*)` rewrite in `vercel.json` pointing to `/api/[...path]` with dual root/prefix support, resolving all 404s on `/api/db/*`, `/api/vault/*`, `/api/supabase/*`, `/api/blob/*`.
+  - Zero Request Handler DDL: eradicated all runtime `CREATE TABLE IF NOT EXISTS` queries from request handlers and extracted schema definitions into a standalone one-time SQL migration file (`migrations/001_init.sql`).
+- [x] **STAGE 4 - Secrets and keys [COMPLETED]**
+  - Eradicated vault feature and all secrets from app databases: removed `/api/vault/*` endpoints, `saveVaultHandler`/`getVaultHandler`, secret validation rules, and schema definitions. Removed Firestore `/vault` collection and rules (deployed live).
+  - Cleaned `src/lib/supabase.ts`: stripped all hardcoded fallback Supabase URLs and anon keys; reads strictly from environment variables (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`) and fails loudly with explicit runtime exceptions if missing.
+  - Hardened service-role key: strictly server-side (`process.env.SUPABASE_SERVICE_ROLE_KEY`), never exposed with `VITE_*` to the client; updated backend Supabase client helpers to prefer `SUPABASE_ANON_KEY` + RLS where possible.
+  - Row Level Security (RLS): generated `migrations/002_supabase_rls.sql` providing SQL that drops `vault_secrets` and enables Row Level Security on all Supabase tables (`todos`, `posts`) with explicit default-deny policies, service role bypass, and ownership enforcement.
+- [x] **STAGE 5 - Headers [COMPLETED]**
+  - `vercel.json`: added Content-Security-Policy (restricted to `'self'`, Firebase, Supabase, and Vercel Analytics), removed deprecated `X-XSS-Protection`, added `Strict-Transport-Security` (`max-age=63072000; includeSubDomains; preload`), set `Cross-Origin-Opener-Policy: same-origin-allow-popups` for Firebase Google Auth popups.
+  - Verified and documented Google Cloud Console API key restriction & Firebase Auth authorized domain directives.
+- [x] **STAGE 6 - Remove demo code from production [COMPLETED]**
+  - Removed demo UI explorer tabs and artifacts: `BlobTab`, `DatabaseTab`, `SupabaseTab`, `VaultTab`, `VercelGuideTab`, `ChangelogTab`, `SystemDrawer`, `OverviewTab`, `AuthTab`, `CleanHome`, `Navbar`.
+  - Pruned unused demo API routes: `/api/db/*`, `/api/supabase/*`, `/api/posts*`, `/api/todos*`, `/api/system/health`, `/api/blob/status`.
+  - Deleted obsolete serverless route files: `api/posts.ts`, `api/todos.ts`.
+  - Removed unused dependency: `@google/genai` uninstalled from `package.json`.
+- [x] **STAGE 7 - Performance [COMPLETED]**
+  - Lazy-loaded all 12 intro text components with dynamic `React.lazy` and wrapped them in `<Suspense>` with zero-layout-shift bounding fallback. Initial page load exclusively transfers the single active RNG text effect chunk.
+- [x] **STAGE 8 - Rules for the upcoming shop (apply when building Phase 2) [COMPLETED]**
+  - Prices, totals and wizard option costs are computed and validated server-side only (`api/_shopRules.ts`). Never trust client prices.
+  - Wizard selections validated against a server-side allow-list and hardware compatibility constraints.
+  - Orders get cryptographically secure server-generated IDs (`ORD-...`). Users can read only their own orders (RLS/ownership checks).
+  - Enforced hosted payment provider policy: card data is rejected server-side and never accepted or stored.
+  - Mounted `/api/shop/calculate-bill` endpoint for authoritative calculations.
 
 ---
 
 ## 🛠️ Tech Stack & Architecture Summary
 - **Frontend:** React 19 + TypeScript + Vite + Tailwind CSS v4
 - **Backend Entry:** Express (`server.ts`) mounting Vite in development
-- **Serverless Edge:** `/api/posts.ts`, `/api/todos.ts`, `/api/blob.ts`
+- **Serverless Edge:** `/api/[...path].ts`, `/api/blob.ts`
 - **Database 1:** Firebase Firestore (Zero-Trust ABAC in `asia-south1`)
 - **Database 2:** Neon Serverless PostgreSQL (`@neondatabase/serverless`)
 - **Database 3:** Supabase PostgreSQL (`@supabase/supabase-js`)
 - **Storage Blob:** Vercel Blob (`@vercel/blob`)
-- **Failover Engine:** `resilientVault.ts` with cascading provider failover
+- **Secrets Management:** Environment-only variables (Zero secrets in application databases)
+

@@ -37,59 +37,13 @@
         }
       },
       "required": ["uid", "email", "createdAt"]
-    },
-    "PrivateVaultItem": {
-      "title": "PrivateVaultItem",
-      "description": "Confidential, non-public data securely isolated to the owner",
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier of the secure record",
-          "maxLength": 128
-        },
-        "ownerId": {
-          "type": "string",
-          "description": "Firebase Auth UID of the record owner",
-          "maxLength": 128
-        },
-        "title": {
-          "type": "string",
-          "description": "Title or label for the confidential data item",
-          "maxLength": 150
-        },
-        "secretContent": {
-          "type": "string",
-          "description": "Sensitive confidential data payload strictly forbidden from public viewing",
-          "maxLength": 10000
-        },
-        "category": {
-          "type": "string",
-          "description": "Classification category for the private asset",
-          "maxLength": 50
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time",
-          "description": "Server creation timestamp"
-        },
-        "updatedAt": {
-          "type": "string",
-          "format": "date-time",
-          "description": "Server modification timestamp"
-        }
-      },
-      "required": ["id", "ownerId", "title", "secretContent", "createdAt", "updatedAt"]
     }
   },
   "firestore": {
     "/users/{userId}": {
       "schema": "UserProfile",
       "description": "User profile collection isolated to the owner"
-    },
-    "/vault/{vaultId}": {
-      "schema": "PrivateVaultItem",
-      "description": "Private sensitive storage collection with strict zero-trust owner isolation"
     }
   }
 }
+

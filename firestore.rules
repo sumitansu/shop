@@ -43,16 +43,6 @@ service cloud.firestore {
         (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 1000));
     }
 
-    function isValidVaultItem(data) {
-      return data.keys().hasAll(['id', 'ownerId', 'title', 'secretContent', 'createdAt', 'updatedAt']) &&
-        data.keys().hasOnly(['id', 'ownerId', 'title', 'secretContent', 'category', 'createdAt', 'updatedAt']) &&
-        data.id is string && isValidId(data.id) &&
-        data.ownerId is string && data.ownerId == request.auth.uid &&
-        data.title is string && data.title.size() > 0 && data.title.size() <= 150 &&
-        data.secretContent is string && data.secretContent.size() <= 10000 &&
-        (!('category' in data) || (data.category is string && data.category.size() <= 50));
-    }
-
     // User Profile Documents - strictly isolated to the authenticated owner
     match /users/{userId} {
       allow get: if isValidId(userId) && isOwner(userId);
@@ -68,26 +58,6 @@ service cloud.firestore {
         (!('updatedAt' in incoming()) || incoming().updatedAt == request.time);
       allow delete: if isValidId(userId) && isOwner(userId);
     }
-
-    // Confidential Vault items - zero-trust private data not visible on public site
-    match /vault/{vaultId} {
-      allow get: if isValidId(vaultId) && isSignedIn() && existing().ownerId == request.auth.uid;
-      allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
-      allow create: if isValidId(vaultId) && isSignedIn() &&
-        incoming().id == vaultId &&
-        incoming().ownerId == request.auth.uid &&
-        isValidVaultItem(incoming()) &&
-        incoming().createdAt == request.time &&
-        incoming().updatedAt == request.time;
-      allow update: if isValidId(vaultId) && isSignedIn() &&
-        existing().ownerId == request.auth.uid &&
-        incoming().ownerId == existing().ownerId &&
-        incoming().id == existing().id &&
-        incoming().createdAt == existing().createdAt &&
-        incoming().updatedAt == request.time &&
-        isValidVaultItem(incoming()) &&
-        incoming().diff(existing()).affectedKeys().hasOnly(['title', 'secretContent', 'category', 'updatedAt']);
-      allow delete: if isValidId(vaultId) && isSignedIn() && existing().ownerId == request.auth.uid;
-    }
   }
 }
+

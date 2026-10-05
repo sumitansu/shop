@@ -1,20 +1,22 @@
 import React, { useState, Suspense, lazy } from 'react';
 import { AuthProvider } from './context/AuthContext';
-import TechText from './components/TechText';
-import FoldText from './components/FoldText';
-import ParticleText from './components/ParticleText';
-import StrokeText from './components/StrokeText';
-import Shuffle from './components/Shuffle';
-import ScrambledText from './components/ScrambledText';
-import TextType from './components/TextType';
-import RotatingText from './components/RotatingText';
-import TextPressure from './components/TextPressure';
-import DecryptedText from './components/DecryptedText';
-import BlurText from './components/BlurText';
-import SplitText from './components/SplitText';
 import { Dices, RefreshCw } from 'lucide-react';
 
 const GradientWaves = lazy(() => import('./components/GradientWaves'));
+
+// STAGE 7: Performance - Lazy-load all 12 intro text components on demand
+const TechText = lazy(() => import('./components/TechText'));
+const FoldText = lazy(() => import('./components/FoldText'));
+const ParticleText = lazy(() => import('./components/ParticleText'));
+const StrokeText = lazy(() => import('./components/StrokeText'));
+const Shuffle = lazy(() => import('./components/Shuffle'));
+const ScrambledText = lazy(() => import('./components/ScrambledText'));
+const TextType = lazy(() => import('./components/TextType'));
+const RotatingText = lazy(() => import('./components/RotatingText'));
+const TextPressure = lazy(() => import('./components/TextPressure'));
+const DecryptedText = lazy(() => import('./components/DecryptedText'));
+const BlurText = lazy(() => import('./components/BlurText'));
+const SplitText = lazy(() => import('./components/SplitText'));
 
 const INTRO_EFFECTS = [
   { id: 'tech', label: 'TechText (Canvas Blueprint)' },
@@ -88,7 +90,12 @@ export default function App() {
         {/* Intro Section - exactly 100vh full-screen */}
         <section className="h-screen w-full flex flex-col items-center justify-center relative px-4 sm:px-6 z-10">
           <div className="w-full max-w-5xl min-h-[360px] sm:min-h-[460px] md:min-h-[520px] flex items-center justify-center relative">
-            {activeEffect === 'tech' && (
+            <Suspense
+              fallback={
+                <div className="w-full max-w-4xl h-[220px] sm:h-[260px] md:h-[290px] flex items-center justify-center pointer-events-none" />
+              }
+            >
+              {activeEffect === 'tech' && (
               <div key="tech" className="w-full max-w-4xl h-[220px] sm:h-[260px] md:h-[290px] relative flex items-center justify-center">
                 <TechText
                   text="DoRaemon's Shop"
@@ -307,6 +314,7 @@ export default function App() {
                 />
               </div>
             )}
+            </Suspense>
           </div>
 
           {/* Discreet RNG Roll Controller & Info Badge */}
