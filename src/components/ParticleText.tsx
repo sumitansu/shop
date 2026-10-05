@@ -398,7 +398,7 @@ export const ParticleText = ({
     };
 
     const handleClick = (): void => {
-      if (trigger === 'click') startGather(true);
+      // Intentionally do not reset or scatter particles on click
     };
 
     const reduceMotionQuery = window.matchMedia?.('(prefers-reduced-motion: reduce)');

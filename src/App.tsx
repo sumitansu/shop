@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, Suspense, lazy } from 'react';
 import { AuthProvider } from './context/AuthContext';
 import TechText from './components/TechText';
 import FoldText from './components/FoldText';
@@ -13,6 +13,8 @@ import DecryptedText from './components/DecryptedText';
 import BlurText from './components/BlurText';
 import SplitText from './components/SplitText';
 import { Dices, RefreshCw } from 'lucide-react';
+
+const GradientWaves = lazy(() => import('./components/GradientWaves'));
 
 const INTRO_EFFECTS = [
   { id: 'tech', label: 'TechText (Canvas Blueprint)' },
@@ -52,8 +54,39 @@ export default function App() {
   return (
     <AuthProvider>
       <main className="min-h-screen w-full bg-black text-white flex flex-col items-center justify-center overflow-hidden relative select-none">
+        {/* Dynamic Gradient Waves Background */}
+        <div className="absolute inset-0 w-full h-full pointer-events-none z-0 overflow-hidden">
+          <Suspense fallback={null}>
+            <GradientWaves
+              horizonColor="#040d1a"
+              waveColor="#0284c7"
+              crestColor="#7dd3fc"
+              speed={0.35}
+              amplitude={3.8}
+              waveScale={0.55}
+              waveRatio={0.88}
+              swell={38}
+              turbulence={24}
+              tilt={1.12}
+              zoom={1.05}
+              height={4.6}
+              fogDepth={24}
+              detail="medium"
+              brightness={1.35}
+              opacity={0.92}
+              mouseInteraction={true}
+              parallaxStrength={0.5}
+              grain={true}
+              grainIntensity={0.03}
+            />
+          </Suspense>
+          {/* Subtle atmosphere shading ensuring text remains punchy and high contrast */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-black/60 pointer-events-none" />
+          <div className="absolute inset-0 bg-gradient-to-r from-black/50 via-transparent to-black/50 pointer-events-none" />
+        </div>
+
         {/* Intro Section - exactly 100vh full-screen */}
-        <section className="h-screen w-full flex flex-col items-center justify-center relative px-4 sm:px-6">
+        <section className="h-screen w-full flex flex-col items-center justify-center relative px-4 sm:px-6 z-10">
           <div className="w-full max-w-5xl min-h-[360px] sm:min-h-[460px] md:min-h-[520px] flex items-center justify-center relative">
             {activeEffect === 'tech' && (
               <div key="tech" className="w-full max-w-4xl h-[220px] sm:h-[260px] md:h-[290px] relative flex items-center justify-center">
@@ -78,7 +111,7 @@ export default function App() {
             )}
 
             {activeEffect === 'fold' && (
-              <div key="fold" className="w-full flex items-center justify-center py-4">
+              <div key="fold" className="w-full max-w-4xl h-[220px] sm:h-[260px] md:h-[290px] flex items-center justify-center px-4">
                 <FoldText
                   text="DoRaemon's Shop"
                   splitBy="char"
@@ -110,7 +143,7 @@ export default function App() {
                   pointerRepel={45}
                   repelRadius={130}
                   idleDrift={0.7}
-                  trigger="hover"
+                  trigger="mount"
                   fontSize="clamp(2.5rem, 6.5vw, 5.25rem)"
                   fontWeight={800}
                   glow={true}
@@ -119,7 +152,7 @@ export default function App() {
             )}
 
             {activeEffect === 'stroke' && (
-              <div key="stroke" className="w-full max-w-4xl px-4 flex items-center justify-center">
+              <div key="stroke" className="w-full max-w-4xl h-[220px] sm:h-[260px] md:h-[290px] px-4 flex items-center justify-center">
                 <StrokeText
                   text="DoRaemon's Shop"
                   strokeColor="#38bdf8"
@@ -140,7 +173,7 @@ export default function App() {
             )}
 
             {activeEffect === 'shuffle' && (
-              <div key="shuffle" className="w-full max-w-4xl px-4 flex flex-col items-center justify-center text-center">
+              <div key="shuffle" className="w-full max-w-4xl h-[220px] sm:h-[260px] md:h-[290px] px-4 flex flex-col items-center justify-center text-center">
                 <Shuffle
                   text="DoRaemon's Shop"
                   shuffleDirection="down"
@@ -159,7 +192,7 @@ export default function App() {
             )}
 
             {activeEffect === 'scramble' && (
-              <div key="scramble" className="w-full max-w-4xl flex items-center justify-center text-center px-4">
+              <div key="scramble" className="w-full max-w-4xl h-[220px] sm:h-[260px] md:h-[290px] flex items-center justify-center text-center px-4">
                 <ScrambledText
                   radius={120}
                   duration={1.2}
@@ -173,7 +206,7 @@ export default function App() {
             )}
 
             {activeEffect === 'type' && (
-              <div key="type" className="w-full max-w-4xl flex items-center justify-center text-center font-mono text-4xl sm:text-6xl md:text-7xl lg:text-8xl font-black tracking-tight leading-none px-4">
+              <div key="type" className="w-full max-w-4xl h-[220px] sm:h-[260px] md:h-[290px] flex items-center justify-center text-center font-mono text-4xl sm:text-6xl md:text-7xl lg:text-8xl font-black tracking-tight leading-none px-4">
                 <TextType
                   text={["DoRaemon's Shop", "ESP32 and BW16", "Hand made with care", "DoRaemon's Shop"]}
                   typingSpeed={65}
@@ -190,7 +223,7 @@ export default function App() {
             )}
 
             {activeEffect === 'rotate' && (
-              <div key="rotate" className="w-full max-w-4xl flex items-center justify-center text-center text-4xl sm:text-6xl md:text-7xl lg:text-8xl font-black tracking-tight leading-none px-4">
+              <div key="rotate" className="w-full max-w-4xl h-[220px] sm:h-[260px] md:h-[290px] flex items-center justify-center text-center text-4xl sm:text-6xl md:text-7xl lg:text-8xl font-black tracking-tight leading-none px-4">
                 <RotatingText
                   texts={[
                     "DoRaemon's Shop",
@@ -213,7 +246,7 @@ export default function App() {
             )}
 
             {activeEffect === 'pressure' && (
-              <div key="pressure" className="w-full max-w-4xl h-[160px] sm:h-[190px] md:h-[220px] relative flex items-center justify-center px-4">
+              <div key="pressure" className="w-full max-w-4xl h-[220px] sm:h-[260px] md:h-[290px] relative flex items-center justify-center px-4">
                 <TextPressure
                   text="DoRaemon's Shop"
                   flex={true}
@@ -231,7 +264,7 @@ export default function App() {
             )}
 
             {activeEffect === 'decrypted' && (
-              <div key="decrypted" className="w-full max-w-4xl flex items-center justify-center text-center px-4 font-mono text-4xl sm:text-6xl md:text-7xl lg:text-8xl font-black tracking-tight leading-none">
+              <div key="decrypted" className="w-full max-w-4xl h-[220px] sm:h-[260px] md:h-[290px] flex items-center justify-center text-center px-4 font-mono text-4xl sm:text-6xl md:text-7xl lg:text-8xl font-black tracking-tight leading-none">
                 <DecryptedText
                   text="DoRaemon's Shop"
                   speed={40}
@@ -247,7 +280,7 @@ export default function App() {
             )}
 
             {activeEffect === 'blur' && (
-              <div key="blur" className="w-full max-w-4xl flex items-center justify-center text-center px-4">
+              <div key="blur" className="w-full max-w-4xl h-[220px] sm:h-[260px] md:h-[290px] flex items-center justify-center text-center px-4">
                 <BlurText
                   text="DoRaemon's Shop"
                   delay={120}
@@ -260,7 +293,7 @@ export default function App() {
             )}
 
             {activeEffect === 'split' && (
-              <div key="split" className="w-full max-w-4xl flex items-center justify-center text-center px-4">
+              <div key="split" className="w-full max-w-4xl h-[220px] sm:h-[260px] md:h-[290px] flex items-center justify-center text-center px-4">
                 <SplitText
                   text="DoRaemon's Shop"
                   className="text-4xl sm:text-6xl md:text-7xl lg:text-8xl font-black tracking-tight text-white font-mono leading-none"
