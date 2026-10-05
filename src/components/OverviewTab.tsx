@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Database, ShieldCheck, Lock, Globe, FileCode2, ArrowRight, Activity, Server, KeyRound, AlertTriangle } from 'lucide-react';
-import { TabType } from './Navbar';
+import { TabType } from '../types';
 import { testConnection, firebaseConfig } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
 
