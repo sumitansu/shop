@@ -13,6 +13,7 @@
 
 | Date & Time (UTC) | Author | Scope / Task | Files Modified / Added | Summary of Changes |
 | :--- | :--- | :--- | :--- | :--- |
+| 2026-10-05 20:30 | AI Assistant | Master Specification Update & Design Reference Integration | `README.md` | Integrated owner's updated e-commerce specification and design reference directives: planned aesthetic benchmarks from Unseen Studio (unseen.co), Linear (linear.app blur-in loading), Resend (resend.com typography/micro-interactions), Poppr, and explicit rejection of QuadAngles; codified performance mandate requiring native smoothness on low-end phones before potato mode; added intentional responsive scaling from mobile to TV displays; enshrined direct social dispatch protocols (WhatsApp +91, Telegram prefill, Instagram DM), deterministic price history decoding, and urgency order sorting into Roadmap. |
 | 2026-10-05 20:25 | AI Assistant | Security Pass Stage 8: Shop Security Directives & Rules Engine | `src/types/shop.ts`, `api/_shopRules.ts`, `api/_app.ts`, `README.md` | Enshrined non-negotiable Phase 2 security contracts: created server-authoritative pricing and allow-list engine (`api/_shopRules.ts`, `src/types/shop.ts`); prices, itemized costs, and totals are computed strictly server-side with zero trust in client values; options validated against strict hardware compatibility rules (V1 incompatible with wireless control; V1 fixed at 2 antennas; module/antenna type pairing); order IDs generated cryptographically server-side (`ORD-...`); enforced hosted payment compliance rejecting credit card data payloads; mounted `/api/shop/calculate-bill` endpoint. |
 | 2026-10-05 20:20 | AI Assistant | Security Pass Stage 7: Performance & Code-Splitting | `src/App.tsx`, `README.md` | Code-split and lazy-loaded all 12 React Bits intro typography components (`TechText`, `FoldText`, `ParticleText`, `StrokeText`, `Shuffle`, `ScrambledText`, `TextType`, `RotatingText`, `TextPressure`, `DecryptedText`, `BlurText`, `SplitText`) using dynamic `React.lazy` and wrapped in `<Suspense>` with zero-layout-shift bounding fallback. Eliminated heavy upfront JS bundle bloat so the browser downloads exclusively the single selected RNG animation chunk on page load, drastically lowering initial payload and TTI. |
 | 2026-10-05 20:15 | AI Assistant | Security Pass Stage 6: Demo Code & Unused Route Cleanup | `package.json`, `api/_app.ts`, `api/_validation.ts`, `src/types/index.ts`, `README.md`, Deleted: `src/components/BlobTab.tsx`, `DatabaseTab.tsx`, `SupabaseTab.tsx`, `VercelGuideTab.tsx`, `ChangelogTab.tsx`, `SystemDrawer.tsx`, `OverviewTab.tsx`, `AuthTab.tsx`, `CleanHome.tsx`, `Navbar.tsx`, `api/posts.ts`, `api/todos.ts` | Removed all demo explorer tabs and leftover UI (`BlobTab`, `DatabaseTab`, `SupabaseTab`, `VercelGuideTab`, `ChangelogTab`, `SystemDrawer`, `OverviewTab`, `AuthTab`, `CleanHome`, `Navbar`); eliminated obsolete demo route handlers and schemas (`/api/db/*`, `/api/supabase/*`, `/api/posts*`, `/api/todos*`, `/api/system/health`, `/api/blob/status`) while retaining core Quad-Storage Blob endpoints and database connection clients; removed deleted serverless function files `api/posts.ts` and `api/todos.ts`; pruned unused dependency `@google/genai` from `package.json`; cleaned demo interfaces from `src/types/index.ts`. |
@@ -103,20 +104,30 @@ This tracking matrix serves as the single source of truth for current project pr
 ---
 
 #### ⏳ Phase 3: Velocity-Snapped Landing Experience & Settings Drawer (QUEUED)
-- [ ] Full-screen Intro section:
+- [ ] **Design References & Aesthetic Direction:**
+  - **Unseen Studio (`unseen.co`):** Master benchmark for lightweight, ultra-smooth web animations that maintain 60fps on mobile and low-end devices.
+  - **Linear (`linear.app`):** Sleek blur-in loading effect, crisp dark/light theme typography baseline, and subtle keyboard-first accessibility.
+  - **Resend (`resend.com`):** Deliberate typography scale, tactile micro-interactions, subtle borders, and balanced contrast.
+  - **Poppr:** Minor secondary reference for clean interactive states.
+  - **Rejected Benchmark:** QuadAngles (explicitly rejected as overly heavy and laggy on mobile devices).
+- [ ] **Mobile-First Performance Mandate:**
+  - Every visual effect must run natively smooth on low-end phones. If an effect exhibits raymarching or canvas overhead, it must be simplified directly rather than relying on potato mode as a crutch.
+- [ ] **Intentional Responsive Scaling:**
+  - Individually tuned layout geometry across all breakpoints from compact mobile devices (320px) up to large desktop & TV viewports (4K), with deliberate container clamping rather than stretched UI.
+- [ ] **Full-screen Intro & Velocity-Snapped Scroll:**
   - Exact 100vh viewport height.
   - Brand typography: "DoRaemon's Shop".
-  - Velocity-based scroll snapping: measures scroll direction and velocity to smoothly animate past the intro or snap back (never resting halfway).
-- [ ] Products Section:
-  - Standard smooth natural scroll.
-  - Reverse scroll-up snap threshold returning to Intro.
-  - Product cards: Product 1 (clickable to wizard) and Product 2 ("Coming Soon" badge).
-- [ ] Settings Drawer (`src/components/SettingsModal.tsx`):
-  - Dark / Light theme toggle (defaults to system preference).
-  - Currency override dropdown.
-  - Admin login trigger button.
-  - **"Potato Device" Mode:** completely removes animations, heavy canvas, and transitions for maximum performance.
-  - **30-FPS Performance Monitor:** tracks average frame-rate; triggers a friendly prompt if FPS drops below 30 for 10s (honors visitor dismissals and respects `prefers-reduced-motion`).
+  - Velocity-based scroll snapping: measures scroll direction and velocity to smoothly animate past the intro (to products) or snap back (never resting halfway).
+  - Products section: natural free scroll with upward velocity snap threshold returning to the intro.
+- [ ] **Products Section:**
+  - Product 1: 2.4GHz customisable hardware device card (navigates to step-by-step wizard).
+  - Product 2: 5GHz device ("Coming Soon" non-orderable card, built to receive its wizard in the future).
+- [ ] **Settings Drawer (`src/components/SettingsModal.tsx`):**
+  - Theme switcher: Dark / Light (defaults to visitor's system preference; falls back to dark).
+  - Currency override dropdown: manual currency selection overriding auto-detected locale currency.
+  - Admin login trigger button: launches the admin authentication modal (no public links elsewhere).
+  - **"Potato Device" Mode:** disables all animations, snap effects, canvas shaders, and heavy transitions for maximum performance on low-spec hardware. Off by default; persistent in `localStorage`.
+  - **30-FPS Performance Monitor:** lightweight frame-rate tracker; triggers a friendly, non-blocking toast offering potato mode if average FPS drops below 30 for 10s (honors visitor dismissals and respects `prefers-reduced-motion` automatically).
 
 ---
 
@@ -124,38 +135,39 @@ This tracking matrix serves as the single source of truth for current project pr
 - [ ] Wizard Navigation Shell with step back-tracking and state preservation:
   - **Step 1: Firmware** — V1 (₹100) vs V2 (₹300).
   - **Step 2: Display** — No (₹0) vs Yes (+₹300).
-  - **Step 3: Wireless Control** — V2 only (+₹700). V1 shows disabled with an "Upgrade to V2" button (+₹900 total: ₹700 module + ₹200 firmware diff).
+  - **Step 3: Wireless Control** (V2 only) — No (₹0) vs Yes (+₹700). V1 shows disabled with an "Upgrade to V2" button (+₹900 total: ₹700 module + ₹200 firmware diff; wireless control charge is not doubled).
   - **Step 4: Number of Antennas** — V1 fixed at 2 (other counts disabled with +₹200 upgrade offer). V2 selectable 1 to 4 antennas (₹50 each).
-  - **Step 5: Antenna Module Quality** (per antenna) — Normal (₹200) vs Powerful (₹700).
-  - **Step 6: Antenna Type** (per antenna) — 0dbi (₹100, free if Normal module), 6dbi (₹150), 12dbi (₹450).
+  - **Step 5: Antenna Module Quality** (chosen per antenna) — Normal (₹200) vs Powerful (₹700).
+  - **Step 6: Antenna Type** (chosen per antenna) — 0dbi (₹100, free if Normal module), 6dbi (₹150), 12dbi (₹450).
   - **Step 7: Bill Summary** — Full itemized breakdown + mandatory Core Module Kit (+₹700).
-- [ ] Advisory Prompt System (friendly, non-blocking guidance):
+- [ ] Advisory Prompt System (short, friendly, non-blocking suggestions):
   - 1 antenna selected: recommends upgrading to 2+ antennas for optimal performance.
   - Normal module + 0dbi/6dbi: advises that extra range will not increase.
-  - Normal module + 12dbi: friendly warning that it's a waste of money.
+  - Normal module + 12dbi: friendly warning that 12dbi with Normal module is a waste of money (still selectable).
   - Powerful module + 0dbi: toast suggesting 6dbi/12dbi to utilize module power.
-- [ ] Live reactive price calculator (INR reference + visitor currency).
+- [ ] Live reactive price calculator (INR reference + converted visitor currency).
 
 ---
 
 #### ⏳ Phase 5: Bill Generation, Deterministic Order Code & Social Sharing (QUEUED)
 - [ ] Bill Presentation:
   - Line-by-line itemization of options, quantities, unit prices.
-  - Fixed line item: "Core module kit — ₹700".
+  - Fixed line item: "Core module kit — ₹700" (contents omitted from customer view).
   - Shipping notice line: *"shipping charges may apply"*.
 - [ ] Promo Code Engine:
-  - Server-side validation with IP rate-limiting to prevent brute-forcing.
+  - Server-side validation with IP rate-limiting to prevent guessing.
   - Flat discount vs percentage discount.
+  - Promo usage limits & condition checks (validity window, minimum order total).
 - [ ] Deterministic Order Code Generator:
-  - Format: `[customer-part]-[config-part]-[promo-part]`.
+  - Format: `[customer-part]-[config-part]-[promo-part]` (one configuration per code).
   - Customer part derived from browser fingerprint + session token.
   - Config part deterministically hashed from product and chosen options.
-  - Promo part encrypted/obfuscated (omitted if no promo applied).
+  - Promo part encrypted/obfuscated (omitted if no promo applied, yielding 2 parts).
   - Copy-to-clipboard button with visual feedback.
 - [ ] Direct Social Order Dispatch Buttons:
-  - **WhatsApp:** `wa.me/919333652129?text=<prefilled-order-code>`
+  - **WhatsApp:** `wa.me/919333652129?text=<prefilled-order-code>` (with confirmed +91 country code).
   - **Telegram:** `@speedabraker` / `9333652129` with prefilled draft text.
-  - **Instagram:** `@speedabraker` profile launch with clipboard reminder.
+  - **Instagram:** `@speedabraker` direct profile/DM launch with automatic clipboard copy toast.
 
 ---
 
@@ -163,22 +175,23 @@ This tracking matrix serves as the single source of truth for current project pr
 - [ ] Admin Authentication:
   - Firebase email/username + password login.
   - Server-side rate-limiting and brute-force lockout.
+  - Server-side authorization check on every admin API endpoint.
 - [ ] Catalog Controls:
   - Dynamic option price adjustments in INR with automatic versioned price history.
   - Stock toggles (In Stock / Out of Stock).
   - Promo code management (expiry dates, minimum order, product constraints, usage limits).
-- [ ] Order Code Decoder Console:
+- [ ] Standalone Offline Order Code Decoder:
   - Input field to paste customer order codes.
-  - Offline decoder resolves exact configuration, options, and historic pricing at creation time.
-  - "Upload to Cloud" button: commits verified orders across all 4 storage providers (Firebase, Neon, Supabase, Vercel Blob).
+  - Offline decoder resolves exact configuration, options, and historic pricing that were valid at creation time.
+  - "Upload to Cloud" button: commits verified orders across all 4 storage providers (Firebase, Neon, Supabase, Vercel Blob). Generating code on the site stores nothing on the server until confirmed here.
 - [ ] Order Fulfillment Queue:
   - Strict urgency sort order:
     1. **Paid** (sorted oldest-first for immediate fulfillment).
     2. **Pending**.
     3. **Shipped**.
     4. **Delivered**.
-  - Search filter by customer name or order code.
-  - Order status switcher and custom administrative notes.
+  - Search filter by customer name or order code (no status filters).
+  - Order status switcher and custom administrative notes per order.
 
 ---
 
@@ -349,14 +362,62 @@ _Living document. Built through Q&A, intended as a handoff to an AI or developer
 ---
 
 ### 8. Design, Branding & Settings
-- Themes: Dark and Light (defaults to visitor's system preference).
-- Brand name: **"DoRaemon's Shop"**.
-- Settings drawer:
-  - Theme override (Dark / Light).
-  - Manual currency override.
-  - Admin login trigger.
-  - **"Potato Device" Mode:** disables all animations, snap effects, transitions, and heavy assets for maximum performance.
-  - **30-FPS Monitor:** tracks average frame-rate; offers potato mode prompt if FPS falls below 30 for 10 consecutive seconds. Remembers visitor's preference and honors `prefers-reduced-motion`.
+- **Two Themes:** Dark and Light (follows visitor's system setting first; defaults to dark if undetectable).
+- **Style:** Minimal, with fancy smooth animations and transitions.
+- **Responsive Geometry:** Fully responsive and individually tuned for every size, from tiny mobile screens (320px) up to big TV screens (large-screen layouts designed intentionally with purposeful bounds, not simply stretched).
+- **Design References (Owner's Curated Picks):**
+  - **Main Inspiration:** **Unseen Studio (`unseen.co`)**. Benchmark for ultra-smooth interactive effects, lightweight rendering pipelines, and fluid 60fps performance even on low-end devices.
+  - **Linear (`linear.app`):** The signature blur-in loading effect, crisp dark mode typography baseline, and subtle keyboard-first accessibility.
+  - **Resend (`resend.com`):** Deliberate typography scale, text effects, subtle borders, and tactile micro-interactions.
+  - **Poppr:** Secondary reference for modern interactive states.
+  - **Explicitly Rejected:** **QuadAngles** (rejected for being excessively heavy and laggy on phones).
+- **Mobile Performance Mandate:** Every effect must stay natively smooth on low-end phones. If an effect is heavy, simplify its shader/canvas math directly rather than relying on potato mode as a crutch.
+- **Brand Name:** **"DoRaemon's Shop"** (temporary working name; modularized for easy change).
+- **Color Accents & Typography:** Clean neutral placeholder palette until customized with AI.
+- **Settings Section (`src/components/SettingsModal.tsx`):**
+  - **Theme Option:** Dark / Light manual toggle.
+  - **Admin Login Button:** Opens the admin authentication modal (no public links to admin panel elsewhere on the site).
+  - **Currency Override:** Manual currency picker overriding auto-detected locale.
+  - **"Potato Device" Mode:** Disables all animations, snap effects, transitions, canvas shaders, and heavy assets for a blazing-fast, lightweight experience. Off by default; persistent in `localStorage`.
+  - **30-FPS Performance Monitor:** Lightweight `requestAnimationFrame` monitor; if average FPS drops below 30 for 10 consecutive seconds, shows a friendly non-blocking prompt offering potato mode. Honors dismissals and automatically disables animations if `prefers-reduced-motion` is enabled in the browser.
+
+---
+
+### 9. Tech Preferences & Redundancy Architecture
+- **Quad-Storage Services:** Firebase Firestore, Neon PostgreSQL, Supabase PostgreSQL, Vercel Blob.
+- **Firebase:** Administrator username/password authentication with rate-limiting and brute-force lockout.
+- **Quad-Redundancy Replication:**
+  - Whenever promo codes or sensitive data change (promo codes, dynamic prices, price history, stock, confirmed orders), updates are written across all four storage providers.
+  - Reads attempt the primary provider first and automatically cascade through fallbacks if unavailable or rate-limited.
+  - Shared normalized data schemas (JSON documents) ensuring seamless compatibility across SQL (Neon, Supabase) and non-SQL (Firestore, Vercel Blob) engines.
+  - Optimistic concurrency with version numbers and timestamps so newest writes resolve conflicts.
+  - Zero plain-text credentials: All secrets, connection strings, and service tokens reside strictly in server environment variables.
+- **Public Input Security:**
+  - Strict parameterization, schema validation, and sanitization across all public text fields.
+  - Multi-tier IP and session rate-limiting, especially on promo code lookups.
+
+---
+
+### 10. Decided Architecture & Specifications
+- **Price Changes vs Historical Codes (DECIDED):** An order code always decodes to the exact prices that were valid at the time the customer created it. The backend maintains an append-only versioned price history, and codes embed a deterministic timestamp/version identifier.
+- **Admin Order Queue & Urgency Sort (DECIDED):**
+  - Urgency sort order: **`Paid`** (oldest first for immediate fulfillment) $\rightarrow$ **`Pending`** $\rightarrow$ **`Shipped`** $\rightarrow$ **`Delivered`**.
+  - Manual customer name assigned during owner confirmation.
+  - Search filter by customer name or order code (no status filter dropdowns).
+  - Standalone offline code decoder resolves products, options, and historic prices without requiring prior database records.
+- **Promo Code Obfuscation:** Truncated cryptographic hash / reversible cipher matched against server-side promo table.
+- **Customer Hardware/Device Identity:** Browser fingerprint combined with session token, presented with prominent copy-to-clipboard feedback.
+
+---
+
+### 11. Handoff Notes
+- **Product 2 (5GHz Device):** Rendered as a "Coming Soon" card with modular architecture ready for its customisation wizard.
+- **Single Configuration per Code:** Each generated order code represents exactly one custom device configuration.
+- **Upgrade Pricing Arithmetic:** V1 $\rightarrow$ V2 wireless control upgrade (₹900) includes both the microcontroller upgrade (₹200) and wireless module (₹700) without double charging.
+- **Direct Social Dispatch:**
+  - **WhatsApp:** Pre-fills drafted order code via `wa.me/919333652129` (including mandatory `+91` country code).
+  - **Telegram:** Pre-fills drafted order code to `@speedabraker` / `9333652129`.
+  - **Instagram:** Direct link to `@speedabraker` profile/DM with automatic clipboard copy toast.
 
 ---
 
