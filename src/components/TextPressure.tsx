@@ -47,7 +47,7 @@ const debounce = (func: (...args: any[]) => void, delay: number) => {
 export const TextPressure: React.FC<TextPressureProps> = ({
   text = 'Compressa',
   fontFamily = 'Roboto Flex',
-  fontUrl = 'https://fonts.googleapis.com/css2?family=Roboto+Flex:opsz,wdth,wght@8..144,25..151,100..1000&display=swap',
+  fontUrl,
   width = true,
   weight = true,
   italic = true,
@@ -181,7 +181,6 @@ export const TextPressure: React.FC<TextPressureProps> = ({
   const styleElement = useMemo(() => {
     return (
       <style>{`
-        @import url('${fontUrl}');
         .stroke span {
           position: relative;
           color: ${textColor};
@@ -198,7 +197,7 @@ export const TextPressure: React.FC<TextPressureProps> = ({
         }
       `}</style>
     );
-  }, [fontFamily, fontUrl, stroke, textColor, strokeColor, strokeWidth]);
+  }, [textColor, strokeColor, strokeWidth]);
 
   return (
     <div ref={containerRef} className="relative w-full h-full flex items-center justify-center overflow-hidden bg-transparent">

@@ -48,6 +48,16 @@ export const ALLOWED_FIRMWARE: readonly FirmwareVersion[] = ['v1', 'v2'];
 export const ALLOWED_MODULES: readonly AntennaModuleQuality[] = ['normal', 'powerful'];
 export const ALLOWED_ANTENNA_TYPES: readonly AntennaType[] = ['0dbi', '6dbi', '12dbi'];
 
+// Promo Code Security: strictly alphanumeric 1-20 characters. Underscores and symbols are forbidden
+// to prevent delimiter collision in ORDCODE_* split('_') and prevent DB VARCHAR(50) overflow.
+export const PROMO_CODE_REGEX = /^[A-Z0-9]{1,20}$/;
+
+export function isValidPromoCode(promo: unknown): promo is string {
+  if (typeof promo !== 'string') return false;
+  const clean = promo.trim().toUpperCase();
+  return PROMO_CODE_REGEX.test(clean);
+}
+
 export interface ValidationSuccess {
   valid: true;
   config: Product1WizardConfig;
@@ -57,6 +67,7 @@ export interface ValidationSuccess {
 export interface ValidationFailure {
   valid: false;
   error: string;
+  status?: number;
 }
 
 export type WizardValidationResult = ValidationSuccess | ValidationFailure;
@@ -274,8 +285,39 @@ export function validateAndCalculateOrder(payload: unknown): WizardValidationRes
     .digest('hex')
     .slice(0, 16);
 
-  const promoUsed = typeof data.promoCode === 'string' ? data.promoCode.trim().toUpperCase() : null;
-  const orderCodeSignature = createOrderHmac(orderId, finalTotalInr, configHash, promoUsed || '');
+  // Validate Promo Code (strictly /^[A-Z0-9]{1,20}$/, rejecting underscores & symbols)
+  let promoUsed: string | null = null;
+  if (data.promoCode !== undefined && data.promoCode !== null && data.promoCode !== '') {
+    if (typeof data.promoCode !== 'string') {
+      return { valid: false, error: 'promoCode must be a string', status: 400 };
+    }
+    const cleanPromo = data.promoCode.trim().toUpperCase();
+    if (cleanPromo.length > 0) {
+      if (!isValidPromoCode(cleanPromo)) {
+        return {
+          valid: false,
+          error: 'Invalid promo code format. Promo codes must be 1 to 20 uppercase alphanumeric characters (A-Z, 0-9) without underscores or special characters.',
+          status: 400,
+        };
+      }
+      promoUsed = cleanPromo;
+    }
+  }
+
+  let orderCodeSignature: string;
+  try {
+    orderCodeSignature = createOrderHmac(orderId, finalTotalInr, configHash, promoUsed || '');
+  } catch (err: unknown) {
+    if (err instanceof MissingOrderSigningSecretError) {
+      return {
+        valid: false,
+        error: 'Internal server error',
+        status: 500,
+      };
+    }
+    throw err;
+  }
+
   const promoSlug = promoUsed ? promoUsed : 'NOPROMO';
   const orderCode = `ORDCODE_${orderId}_${finalTotalInr}_${configHash}_${promoSlug}_${orderCodeSignature}`;
 
@@ -300,19 +342,52 @@ export function validateAndCalculateOrder(payload: unknown): WizardValidationRes
   };
 }
 
-export const ORDER_SIGNING_SECRET =
-  process.env.ORDER_SIGNING_SECRET ||
-  process.env.BLOB_READ_WRITE_TOKEN ||
-  'doraemon-shop-secure-hmac-salt-key-2026';
+export class MissingOrderSigningSecretError extends Error {
+  readonly status = 500;
+  constructor(message = 'ORDER_SIGNING_SECRET is missing or invalid (minimum 32 characters required)') {
+    super(message);
+    this.name = 'MissingOrderSigningSecretError';
+  }
+}
 
+/**
+ * Retrieves the required cryptographic order signing secret from environment variables.
+ * Enforces a strict minimum length of 32 characters with ZERO fallbacks (no BLOB_READ_WRITE_TOKEN, no hardcoded strings).
+ * If missing or shorter than 32 characters, logs a clear server-side error and throws MissingOrderSigningSecretError.
+ */
+export function getOrderSigningSecret(): string {
+  const secret = process.env.ORDER_SIGNING_SECRET;
+  if (!secret || typeof secret !== 'string' || secret.trim().length < 32) {
+    console.error(
+      '[CRITICAL SECURITY ALERT] ORDER_SIGNING_SECRET is missing or invalid (minimum 32 characters required). Order-code operations failed closed with HTTP 500.'
+    );
+    throw new MissingOrderSigningSecretError();
+  }
+  return secret.trim();
+}
+
+/**
+ * Backwards compatibility reference for ORDER_SIGNING_SECRET without any fallback credentials.
+ */
+export const ORDER_SIGNING_SECRET = process.env.ORDER_SIGNING_SECRET || '';
+
+/**
+ * Computes a full 64-hex HMAC-SHA256 signature for an order configuration and price snapshot.
+ * Never truncates the digest. Fails closed with 500 if ORDER_SIGNING_SECRET is missing or < 32 characters.
+ */
 export function createOrderHmac(
   orderId: string,
   priceInr: number,
   configHash: string,
   promo: string = ''
 ): string {
-  const data = `${orderId}:${priceInr}:${configHash}:${promo}`;
-  return crypto.createHmac('sha256', ORDER_SIGNING_SECRET).update(data).digest('hex').slice(0, 16);
+  const secret = getOrderSigningSecret();
+  const cleanPromo = promo ? promo.trim().toUpperCase() : '';
+  if (cleanPromo && cleanPromo !== 'NOPROMO' && !isValidPromoCode(cleanPromo)) {
+    throw new Error('Invalid promo code format for order signature: must match /^[A-Z0-9]{1,20}$/');
+  }
+  const data = `${orderId}:${priceInr}:${configHash}:${cleanPromo}`;
+  return crypto.createHmac('sha256', secret).update(data).digest('hex');
 }
 
 export interface VerifyOrderCodeResult {
@@ -322,31 +397,89 @@ export interface VerifyOrderCodeResult {
   configHash?: string;
   promoUsed?: string | null;
   error?: string;
+  status?: number;
 }
 
+/**
+ * Verifies an order code against tampering, forged configurations, or altered prices.
+ * Strictly checks the full 64-hex HMAC-SHA256 signature using constant-time crypto.timingSafeEqual.
+ * If ORDER_SIGNING_SECRET is missing or < 32 characters, fails closed with a generic 500 and logs a clear server-side message.
+ */
 export function verifySignedOrderCode(orderCode: string): VerifyOrderCodeResult {
+  // Fail closed if ORDER_SIGNING_SECRET is missing or invalid
+  try {
+    getOrderSigningSecret();
+  } catch (err: unknown) {
+    if (err instanceof MissingOrderSigningSecretError) {
+      return {
+        valid: false,
+        error: 'Internal server error',
+        status: 500,
+      };
+    }
+    throw err;
+  }
+
   if (!orderCode || typeof orderCode !== 'string') {
-    return { valid: false, error: 'Order code is required and must be a string' };
+    return { valid: false, error: 'Order code is required and must be a string', status: 400 };
   }
 
   const parts = orderCode.trim().split('_');
   if (parts.length !== 6 || parts[0] !== 'ORDCODE') {
-    return { valid: false, error: 'Invalid order code format (expected ORDCODE_<id>_<price>_<hash>_<promo>_<sig>)' };
+    return {
+      valid: false,
+      error: 'Invalid order code format (expected ORDCODE_<id>_<price>_<hash>_<promo>_<sig>)',
+      status: 400,
+    };
   }
 
   const [, orderId, priceStr, configHash, promoSlug, receivedSignature] = parts;
   const priceInr = parseInt(priceStr, 10);
   if (isNaN(priceInr) || priceInr < 0) {
-    return { valid: false, error: 'Invalid price encoded in order code' };
+    return { valid: false, error: 'Invalid price encoded in order code', status: 400 };
+  }
+
+  // Validate promo slug: must be 'NOPROMO' or strictly match /^[A-Z0-9]{1,20}$/
+  if (promoSlug !== 'NOPROMO' && !isValidPromoCode(promoSlug)) {
+    return {
+      valid: false,
+      error: 'Security Violation: Invalid promo code format encoded in order code (must be 1-20 uppercase alphanumeric characters without underscores).',
+      status: 400,
+    };
   }
 
   const promo = promoSlug === 'NOPROMO' ? '' : promoSlug;
-  const expectedSignature = createOrderHmac(orderId, priceInr, configHash, promo);
 
-  if (receivedSignature !== expectedSignature) {
+  let expectedSignature: string;
+  try {
+    expectedSignature = createOrderHmac(orderId, priceInr, configHash, promo);
+  } catch (err: unknown) {
+    if (err instanceof MissingOrderSigningSecretError) {
+      return {
+        valid: false,
+        error: 'Internal server error',
+        status: 500,
+      };
+    }
+    throw err;
+  }
+
+  if (!receivedSignature || receivedSignature.length !== 64) {
+    return {
+      valid: false,
+      error: 'Security Violation: Order code signature format is invalid (expected 64 hex characters).',
+      status: 400,
+    };
+  }
+
+  const receivedBuf = Buffer.from(receivedSignature.toLowerCase(), 'utf8');
+  const expectedBuf = Buffer.from(expectedSignature.toLowerCase(), 'utf8');
+
+  if (receivedBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(receivedBuf, expectedBuf)) {
     return {
       valid: false,
       error: 'Security Violation: Order code signature mismatch. The price or configuration has been tampered with.',
+      status: 400,
     };
   }
 

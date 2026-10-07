@@ -2,16 +2,89 @@ import type { Request, Response, NextFunction } from 'express';
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
 
-// Determine if Upstash Redis credentials are provided (from Upstash direct or Vercel KV integration)
-const redisUrl = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
-const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+interface RedisCredentials {
+  url: string;
+  token: string;
+  sourceKey: string;
+}
+
+/**
+ * Resolves Upstash Redis / Vercel KV credentials from environment variables.
+ * Accepts canonical names (UPSTASH_REDIS_REST_URL, KV_REST_API_URL) as well as
+ * any user or integration custom-prefixed names (*_UPSTASH_REDIS_REST_URL, *_KV_REST_API_URL).
+ */
+export function resolveUpstashCredentials(): RedisCredentials | null {
+  // 1. Direct canonical environment variable pairs
+  if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+    return {
+      url: process.env.UPSTASH_REDIS_REST_URL.trim(),
+      token: process.env.UPSTASH_REDIS_REST_TOKEN.trim(),
+      sourceKey: 'UPSTASH_REDIS_REST_URL',
+    };
+  }
+  if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
+    return {
+      url: process.env.KV_REST_API_URL.trim(),
+      token: process.env.KV_REST_API_TOKEN.trim(),
+      sourceKey: 'KV_REST_API_URL',
+    };
+  }
+
+  // 2. Scan for custom-prefixed Upstash or Vercel KV variable pairs
+  const envEntries = Object.entries(process.env);
+
+  for (const [key, val] of envEntries) {
+    if (val && key.endsWith('UPSTASH_REDIS_REST_URL')) {
+      const prefix = key.slice(0, key.length - 'UPSTASH_REDIS_REST_URL'.length);
+      const tokenKey = `${prefix}UPSTASH_REDIS_REST_TOKEN`;
+      const tokenVal = process.env[tokenKey];
+      if (tokenVal && tokenVal.trim().length > 0) {
+        return {
+          url: val.trim(),
+          token: tokenVal.trim(),
+          sourceKey: key,
+        };
+      }
+    }
+  }
+
+  for (const [key, val] of envEntries) {
+    if (val && key.endsWith('KV_REST_API_URL')) {
+      const prefix = key.slice(0, key.length - 'KV_REST_API_URL'.length);
+      const tokenKey = `${prefix}KV_REST_API_TOKEN`;
+      const tokenVal = process.env[tokenKey];
+      if (tokenVal && tokenVal.trim().length > 0) {
+        return {
+          url: val.trim(),
+          token: tokenVal.trim(),
+          sourceKey: key,
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
+const redisCreds = resolveUpstashCredentials();
 
 let upstashRedis: Redis | null = null;
-if (redisUrl && redisToken) {
+if (redisCreds) {
   upstashRedis = new Redis({
-    url: redisUrl,
-    token: redisToken,
+    url: redisCreds.url,
+    token: redisCreds.token,
   });
+} else {
+  const isProduction =
+    process.env.NODE_ENV === 'production' ||
+    process.env.VERCEL === '1' ||
+    process.env.VERCEL_ENV === 'production';
+
+  if (isProduction) {
+    console.warn(
+      '⚠️ [CRITICAL PRODUCTION WARNING] No Upstash Redis or Vercel KV credentials found (checked UPSTASH_REDIS_REST_URL, KV_REST_API_URL, and custom prefix variants). Distributed rate limiting is disabled. Falling back to process in-memory sliding window, which will NOT share rate limits across multiple serverless instances!'
+    );
+  }
 }
 
 /**

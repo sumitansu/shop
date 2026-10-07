@@ -3,6 +3,7 @@ import type { Product1WizardConfig, NeonOrderRow, OrderStatus } from '../src/typ
 import {
   validateAndCalculateOrder,
   verifySignedOrderCode,
+  isValidPromoCode,
 } from './_shopRules.ts';
 
 // In-memory fallback cache for development/test environments when DATABASE_URL is not configured
@@ -19,26 +20,6 @@ function getNeonSql() {
   return neon(dbUrl);
 }
 
-/**
- * Initializes the orders table schema on Neon PostgreSQL if not already present.
- */
-async function ensureOrdersTable() {
-  const sql = getNeonSql();
-  if (!sql) return;
-
-  await sql`
-    CREATE TABLE IF NOT EXISTS orders (
-      id VARCHAR(64) PRIMARY KEY,
-      customer_name VARCHAR(150) NOT NULL,
-      config JSONB NOT NULL,
-      price_snapshot_inr INTEGER NOT NULL,
-      promo_used VARCHAR(50) DEFAULT NULL,
-      status VARCHAR(20) NOT NULL DEFAULT 'pending',
-      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-    );
-  `;
-}
-
 export interface ConfirmOrderInput {
   orderCode: string;
   customerName: string;
@@ -51,6 +32,7 @@ export interface OrderOperationResult {
   order?: NeonOrderRow;
   orders?: NeonOrderRow[];
   error?: string;
+  status?: number;
 }
 
 /**
@@ -62,13 +44,13 @@ export async function confirmOrder(input: ConfirmOrderInput): Promise<OrderOpera
   const { orderCode, customerName, config, status = 'pending' } = input;
 
   if (!customerName || typeof customerName !== 'string' || !customerName.trim()) {
-    return { success: false, error: 'Customer name is required' };
+    return { success: false, error: 'Customer name is required', status: 400 };
   }
   const cleanCustomerName = customerName.trim();
 
   const allowedStatuses: OrderStatus[] = ['pending', 'paid', 'shipped', 'delivered'];
   if (!allowedStatuses.includes(status)) {
-    return { success: false, error: `Invalid status. Allowed: ${allowedStatuses.join(', ')}` };
+    return { success: false, error: `Invalid status. Allowed: ${allowedStatuses.join(', ')}`, status: 400 };
   }
 
   // 1. Verify the cryptographic HMAC signature on the order code
@@ -76,6 +58,7 @@ export async function confirmOrder(input: ConfirmOrderInput): Promise<OrderOpera
   if (!codeVerification.valid || !codeVerification.orderId || codeVerification.priceInr === undefined) {
     return {
       success: false,
+      status: codeVerification.status || 400,
       error: codeVerification.error || 'Invalid or tampered order code',
     };
   }
@@ -85,7 +68,8 @@ export async function confirmOrder(input: ConfirmOrderInput): Promise<OrderOpera
   if (!configCalculation.valid) {
     return {
       success: false,
-      error: `Invalid hardware configuration: ${configCalculation.error}`,
+      status: configCalculation.status || 400,
+      error: configCalculation.status === 500 ? 'Internal server error' : `Invalid hardware configuration: ${configCalculation.error}`,
     };
   }
 
@@ -109,19 +93,17 @@ export async function confirmOrder(input: ConfirmOrderInput): Promise<OrderOpera
   const priceSnapshotInr = codeVerification.priceInr;
   const promoUsed = codeVerification.promoUsed || null;
 
+  if (promoUsed !== null && (!isValidPromoCode(promoUsed) || promoUsed.length > 20)) {
+    return {
+      success: false,
+      status: 400,
+      error: 'Security Violation: Invalid promo code format in order (must be 1-20 alphanumeric characters)',
+    };
+  }
+
   const sql = getNeonSql();
   if (sql) {
     try {
-      await ensureOrdersTable();
-
-      // Check if order already exists in Neon
-      const existing = await sql`
-        SELECT id FROM orders WHERE id = ${orderId} LIMIT 1
-      `;
-      if (existing.length > 0) {
-        return { success: false, error: `Order with ID "${orderId}" has already been confirmed.` };
-      }
-
       const rows = await sql`
         INSERT INTO orders (
           id,
@@ -140,8 +122,13 @@ export async function confirmOrder(input: ConfirmOrderInput): Promise<OrderOpera
           ${status},
           NOW()
         )
+        ON CONFLICT (id) DO NOTHING
         RETURNING id, customer_name, config, price_snapshot_inr, promo_used, status, created_at
       `;
+
+      if (rows.length === 0) {
+        return { success: false, error: `Order with ID "${orderId}" has already been confirmed.` };
+      }
 
       return {
         success: true,
@@ -180,7 +167,6 @@ export async function listOrders(): Promise<OrderOperationResult> {
   const sql = getNeonSql();
   if (sql) {
     try {
-      await ensureOrdersTable();
       const rows = await sql`
         SELECT id, customer_name, config, price_snapshot_inr, promo_used, status, created_at
         FROM orders
@@ -230,7 +216,6 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus): P
   const sql = getNeonSql();
   if (sql) {
     try {
-      await ensureOrdersTable();
       const rows = await sql`
         UPDATE orders
         SET status = ${status}

@@ -199,15 +199,21 @@ const shopRouter = express.Router();
 shopRouter.use(publicShopLimiter);
 
 const calculateBillHandler: express.RequestHandler = (req, res) => {
-  const result = validateAndCalculateOrder(req.body);
-  if (!result.valid) {
-    return res.status(400).json({ error: result.error });
+  try {
+    const result = validateAndCalculateOrder(req.body);
+    if (!result.valid) {
+      const statusCode = result.status || 400;
+      return res.status(statusCode).json({ error: result.error });
+    }
+    return res.json({
+      success: true,
+      bill: result.bill,
+      config: result.config,
+    });
+  } catch (error: unknown) {
+    console.error('[Shop API] Error in calculateBillHandler:', error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
-  return res.json({
-    success: true,
-    bill: result.bill,
-    config: result.config,
-  });
 };
 
 // Mount calculate-bill on shopRouter (handles /calculate-bill and /shop/calculate-bill)
@@ -255,22 +261,28 @@ protectedRouter.delete('/blob', mutationLimiter, expressRequireAdmin, deleteBlob
 
 // Confirm an order code into the Neon orders database
 protectedRouter.post('/orders/confirm', mutationLimiter, expressRequireAdmin, async (req, res) => {
-  const { orderCode, customerName, config, status } = req.body;
-  const result = await confirmOrder({
-    orderCode,
-    customerName,
-    config,
-    status,
-  });
+  try {
+    const { orderCode, customerName, config, status } = req.body;
+    const result = await confirmOrder({
+      orderCode,
+      customerName,
+      config,
+      status,
+    });
 
-  if (!result.success) {
-    return res.status(400).json({ error: result.error });
+    if (!result.success) {
+      const statusCode = result.status || 400;
+      return res.status(statusCode).json({ error: result.error });
+    }
+
+    return res.json({
+      success: true,
+      order: result.order,
+    });
+  } catch (error: unknown) {
+    console.error('[Orders API] Error confirming order:', error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
-
-  return res.json({
-    success: true,
-    order: result.order,
-  });
 });
 
 // List all confirmed orders (sorted by urgency: paid, pending, shipped, delivered)
