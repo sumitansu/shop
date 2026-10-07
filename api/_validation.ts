@@ -13,10 +13,99 @@ export const ALLOWED_BLOB_CONTENT_TYPES = [
 
 export type AllowedBlobContentType = (typeof ALLOWED_BLOB_CONTENT_TYPES)[number];
 
+// Maximum allowed blob upload size (4.5 MB Vercel Serverless payload cap)
+export const MAX_BLOB_FILE_SIZE_BYTES = 4.5 * 1024 * 1024;
+
 export interface ValidationResult<T = unknown> {
   valid: boolean;
   error?: string;
   data?: T;
+}
+
+/**
+ * Verifies that the initial bytes (magic numbers) of a file buffer
+ * match the declared MIME Content-Type.
+ * Supported types: image/png, image/jpeg, image/webp, application/pdf.
+ */
+export function verifyMagicBytes(
+  buffer: Buffer | Uint8Array,
+  declaredContentType: AllowedBlobContentType
+): ValidationResult<boolean> {
+  if (!buffer || buffer.length === 0) {
+    return { valid: false, error: 'File content is empty' };
+  }
+
+  const bytes = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
+
+  switch (declaredContentType) {
+    case 'image/png': {
+      // PNG magic number: 89 50 4E 47 0D 0A 1A 0A
+      const pngHeader = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+      if (bytes.length < 8) {
+        return { valid: false, error: 'File too small to be a valid PNG' };
+      }
+      for (let i = 0; i < pngHeader.length; i++) {
+        if (bytes[i] !== pngHeader[i]) {
+          return {
+            valid: false,
+            error: `Security Violation: File header does not match declared Content-Type "image/png" (magic bytes mismatch)`,
+          };
+        }
+      }
+      return { valid: true, data: true };
+    }
+
+    case 'image/jpeg': {
+      // JPEG magic number: FF D8 FF
+      if (bytes.length < 3) {
+        return { valid: false, error: 'File too small to be a valid JPEG' };
+      }
+      if (bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes[2] !== 0xff) {
+        return {
+          valid: false,
+          error: `Security Violation: File header does not match declared Content-Type "image/jpeg" (magic bytes mismatch)`,
+        };
+      }
+      return { valid: true, data: true };
+    }
+
+    case 'image/webp': {
+      // WebP header: 'RIFF' at bytes 0..3 and 'WEBP' at bytes 8..11
+      if (bytes.length < 12) {
+        return { valid: false, error: 'File too small to be a valid WebP' };
+      }
+      const riff = bytes.subarray(0, 4).toString('ascii');
+      const webp = bytes.subarray(8, 12).toString('ascii');
+      if (riff !== 'RIFF' || webp !== 'WEBP') {
+        return {
+          valid: false,
+          error: `Security Violation: File header does not match declared Content-Type "image/webp" (magic bytes mismatch)`,
+        };
+      }
+      return { valid: true, data: true };
+    }
+
+    case 'application/pdf': {
+      // PDF header: '%PDF'
+      if (bytes.length < 4) {
+        return { valid: false, error: 'File too small to be a valid PDF' };
+      }
+      const pdf = bytes.subarray(0, 4).toString('ascii');
+      if (pdf !== '%PDF') {
+        return {
+          valid: false,
+          error: `Security Violation: File header does not match declared Content-Type "application/pdf" (magic bytes mismatch)`,
+        };
+      }
+      return { valid: true, data: true };
+    }
+
+    default:
+      return {
+        valid: false,
+        error: `Unsupported content type for magic byte verification: ${declaredContentType}`,
+      };
+  }
 }
 
 /**

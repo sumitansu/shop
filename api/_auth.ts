@@ -30,7 +30,7 @@ export async function verifyAuthHeader(authHeader?: string | null): Promise<Auth
     return {
       success: false,
       status: 401,
-      error: 'Unauthorized: Missing or malformed Authorization header (Expected: Bearer <Firebase_ID_Token>)',
+      error: 'Unauthorized',
     };
   }
 
@@ -39,7 +39,7 @@ export async function verifyAuthHeader(authHeader?: string | null): Promise<Auth
     return {
       success: false,
       status: 401,
-      error: 'Unauthorized: Bearer token is empty',
+      error: 'Unauthorized',
     };
   }
 
@@ -54,7 +54,7 @@ export async function verifyAuthHeader(authHeader?: string | null): Promise<Auth
       return {
         success: false,
         status: 401,
-        error: 'Unauthorized: Token is missing a valid subject UID',
+        error: 'Unauthorized',
       };
     }
 
@@ -68,11 +68,11 @@ export async function verifyAuthHeader(authHeader?: string | null): Promise<Auth
       },
     };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
+    console.error('JWT verification error:', err);
     return {
       success: false,
       status: 401,
-      error: `Unauthorized: Token verification failed (${message})`,
+      error: 'Unauthorized',
     };
   }
 }

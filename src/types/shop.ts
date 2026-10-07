@@ -30,8 +30,11 @@ export interface CalculatedBillItem {
   note?: string;
 }
 
+export type OrderStatus = 'pending' | 'paid' | 'shipped' | 'delivered';
+
 export interface ServerCalculatedBill {
   orderId: string;
+  orderCode: string; // Server-signed HMAC order code preventing client-side price tampering
   productId: string;
   currency: 'INR';
   baseTotalInr: number;
@@ -43,12 +46,22 @@ export interface ServerCalculatedBill {
   createdAt: string;
 }
 
+export interface NeonOrderRow {
+  id: string;
+  customer_name: string;
+  config: Product1WizardConfig;
+  price_snapshot_inr: number;
+  promo_used: string | null;
+  status: OrderStatus;
+  created_at: string;
+}
+
 export interface ServerOrderRecord {
   orderId: string;
   userId?: string;
   customerSessionHash: string;
   config: Product1WizardConfig;
   bill: ServerCalculatedBill;
-  status: 'pending' | 'paid' | 'shipped' | 'delivered';
+  status: OrderStatus;
   createdAt: string;
 }

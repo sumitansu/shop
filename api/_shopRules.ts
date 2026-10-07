@@ -274,8 +274,14 @@ export function validateAndCalculateOrder(payload: unknown): WizardValidationRes
     .digest('hex')
     .slice(0, 16);
 
+  const promoUsed = typeof data.promoCode === 'string' ? data.promoCode.trim().toUpperCase() : null;
+  const orderCodeSignature = createOrderHmac(orderId, finalTotalInr, configHash, promoUsed || '');
+  const promoSlug = promoUsed ? promoUsed : 'NOPROMO';
+  const orderCode = `ORDCODE_${orderId}_${finalTotalInr}_${configHash}_${promoSlug}_${orderCodeSignature}`;
+
   const bill: ServerCalculatedBill = {
     orderId,
+    orderCode,
     productId: 'product-1-2.4ghz',
     currency: 'INR',
     baseTotalInr,
@@ -291,5 +297,64 @@ export function validateAndCalculateOrder(payload: unknown): WizardValidationRes
     valid: true,
     config: cleanConfig,
     bill,
+  };
+}
+
+export const ORDER_SIGNING_SECRET =
+  process.env.ORDER_SIGNING_SECRET ||
+  process.env.BLOB_READ_WRITE_TOKEN ||
+  'doraemon-shop-secure-hmac-salt-key-2026';
+
+export function createOrderHmac(
+  orderId: string,
+  priceInr: number,
+  configHash: string,
+  promo: string = ''
+): string {
+  const data = `${orderId}:${priceInr}:${configHash}:${promo}`;
+  return crypto.createHmac('sha256', ORDER_SIGNING_SECRET).update(data).digest('hex').slice(0, 16);
+}
+
+export interface VerifyOrderCodeResult {
+  valid: boolean;
+  orderId?: string;
+  priceInr?: number;
+  configHash?: string;
+  promoUsed?: string | null;
+  error?: string;
+}
+
+export function verifySignedOrderCode(orderCode: string): VerifyOrderCodeResult {
+  if (!orderCode || typeof orderCode !== 'string') {
+    return { valid: false, error: 'Order code is required and must be a string' };
+  }
+
+  const parts = orderCode.trim().split('_');
+  if (parts.length !== 6 || parts[0] !== 'ORDCODE') {
+    return { valid: false, error: 'Invalid order code format (expected ORDCODE_<id>_<price>_<hash>_<promo>_<sig>)' };
+  }
+
+  const [, orderId, priceStr, configHash, promoSlug, receivedSignature] = parts;
+  const priceInr = parseInt(priceStr, 10);
+  if (isNaN(priceInr) || priceInr < 0) {
+    return { valid: false, error: 'Invalid price encoded in order code' };
+  }
+
+  const promo = promoSlug === 'NOPROMO' ? '' : promoSlug;
+  const expectedSignature = createOrderHmac(orderId, priceInr, configHash, promo);
+
+  if (receivedSignature !== expectedSignature) {
+    return {
+      valid: false,
+      error: 'Security Violation: Order code signature mismatch. The price or configuration has been tampered with.',
+    };
+  }
+
+  return {
+    valid: true,
+    orderId,
+    priceInr,
+    configHash,
+    promoUsed: promo || null,
   };
 }

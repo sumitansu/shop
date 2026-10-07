@@ -1,50 +1,55 @@
 import express from 'express';
 import { Readable } from 'stream';
+import multer from 'multer';
 import { put, get, list, del } from '@vercel/blob';
 import { neon } from '@neondatabase/serverless';
-import { createClient as createSupabaseClient } from '@supabase/supabase-js';
-import rateLimit from 'express-rate-limit';
+import { apiLimiter, mutationLimiter, publicShopLimiter } from './_rateLimit.ts';
 import { expressRequireAuth, expressRequireAdmin } from './_auth.ts';
 import {
   sanitizeBlobPathname,
   validateBlobContentType,
+  verifyMagicBytes,
+  MAX_BLOB_FILE_SIZE_BYTES,
 } from './_validation.ts';
 import { validateAndCalculateOrder } from './_shopRules.ts';
+import { confirmOrder, listOrders, updateOrderStatus } from './_orders.ts';
 
 const apiApp = express();
 
-// --- Rate Limiting (Stage 2) ---
-export const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many requests, please try again later.' },
-});
+// Trust reverse proxy (Vercel / Cloud Run) to extract real client IP
+apiApp.set('trust proxy', 1);
 
-export const mutationLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 30,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Rate limit exceeded for write operations, please try again later.' },
-});
-
-// Dedicated upload route JSON parser with 5MB limit
-const uploadJsonParser = express.json({ limit: '5mb' });
-
-// Global body parser: 100kb limit (bypassed for dedicated upload route)
-apiApp.use((req, res, next) => {
-  if (req.path.endsWith('/blob/upload') || req.path === '/api/blob/upload' || (req.path.endsWith('/blob') && req.method === 'POST')) {
-    return uploadJsonParser(req, res, next);
-  }
-  return express.json({ limit: '100kb' })(req, res, next);
-});
+// Global body parser: 100kb limit (multipart uploads handled via multer)
+apiApp.use(express.json({ limit: '100kb' }));
 apiApp.use(express.urlencoded({ extended: true, limit: '100kb' }));
 
-// Apply rate limiting & auth barrier to all API routes
+// Apply baseline rate limiting to all incoming API traffic
 apiApp.use(apiLimiter);
-apiApp.use(expressRequireAuth);
+
+// Multipart parser with 4.5 MB in-memory cap for Vercel Serverless
+const uploadStorage = multer.memoryStorage();
+const multerUploader = multer({
+  storage: uploadStorage,
+  limits: {
+    fileSize: MAX_BLOB_FILE_SIZE_BYTES,
+  },
+});
+
+const multerUploadMiddleware: express.RequestHandler = (req, res, next) => {
+  multerUploader.single('file')(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({
+          error: `File size exceeds maximum allowed limit of ${MAX_BLOB_FILE_SIZE_BYTES / (1024 * 1024)} MB`,
+        });
+      }
+      return res.status(400).json({ error: `Upload error: ${err.message}` });
+    } else if (err) {
+      return res.status(400).json({ error: `Upload failed: ${err.message}` });
+    }
+    next();
+  });
+};
 
 // Helper for Blob token
 export const getBlobToken = () => {
@@ -55,7 +60,7 @@ export const getBlobToken = () => {
   return token;
 };
 
-// Helper for Neon PostgreSQL client (Core Quad-Storage Engine)
+// Helper for Neon PostgreSQL client (Orders engine)
 export const getSql = () => {
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) {
@@ -64,45 +69,50 @@ export const getSql = () => {
   return neon(dbUrl);
 };
 
-// Helper for Supabase Client (Prefer anon key + RLS; service-role key only when required)
-export const getSupabase = (preferServiceRole = false) => {
-  const url = process.env.SUPABASE_URL;
-  const key = preferServiceRole
-    ? (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY)
-    : (process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY);
-  if (!url || !key) {
-    throw new Error('SUPABASE_URL and key are not configured in environment.');
-  }
-  return createSupabaseClient(url, key);
-};
-
 // ==========================================
 // Vercel Blob Storage Route Handlers
 // ==========================================
 
 const uploadBlobHandler: express.RequestHandler = async (req, res) => {
   try {
-    const token = getBlobToken();
-    const { pathname, content, contentType } = req.body;
+    if (!req.file || !req.file.buffer) {
+      return res.status(400).json({
+        error: 'File is required in multipart form-data (field name: "file")',
+      });
+    }
 
-    const pathValidation = sanitizeBlobPathname(pathname);
+    if (req.file.size > MAX_BLOB_FILE_SIZE_BYTES) {
+      return res.status(413).json({
+        error: `File exceeds maximum size limit of ${MAX_BLOB_FILE_SIZE_BYTES / (1024 * 1024)} MB`,
+      });
+    }
+
+    // Determine target pathname from request body/query or fallback to uploaded file originalname
+    const rawPath = req.body?.pathname || req.query?.pathname || req.file.originalname;
+    const pathValidation = sanitizeBlobPathname(rawPath);
     if (!pathValidation.valid || !pathValidation.data) {
       return res.status(400).json({ error: pathValidation.error || 'Invalid pathname' });
     }
     const cleanPathname = pathValidation.data;
 
-    const typeValidation = validateBlobContentType(contentType);
+    // Determine content type from request body or file mimetype
+    const rawContentType = req.body?.contentType || req.file.mimetype;
+    const typeValidation = validateBlobContentType(rawContentType);
     if (!typeValidation.valid || !typeValidation.data) {
       return res.status(400).json({ error: typeValidation.error || 'Invalid content-type' });
     }
     const cleanContentType = typeValidation.data;
 
-    if (content === undefined || content === null) {
-      return res.status(400).json({ error: 'Content is required' });
+    // Verify magic bytes against declared content-type
+    const magicValidation = verifyMagicBytes(req.file.buffer, cleanContentType);
+    if (!magicValidation.valid) {
+      return res.status(400).json({ error: magicValidation.error });
     }
 
+    const token = getBlobToken();
+
     // Force access: 'private' unconditionally
-    const blob = await put(cleanPathname, content, {
+    const blob = await put(cleanPathname, req.file.buffer, {
       access: 'private',
       contentType: cleanContentType,
       token,
@@ -184,26 +194,11 @@ const deleteBlobHandler: express.RequestHandler = async (req, res) => {
 // Register Routes (Supports both /path and /api/path)
 // ==========================================
 
-const router = express.Router();
+// --- 1. Public Shop Routes (No login required, strict per-IP limiter) ---
+const shopRouter = express.Router();
+shopRouter.use(publicShopLimiter);
 
-// Vercel Blob
-router.post('/blob/upload', mutationLimiter, expressRequireAdmin, uploadBlobHandler);
-router.get('/blob/get', getBlobHandler);
-router.get('/blob/list', expressRequireAdmin, listBlobsHandler);
-router.delete('/blob/delete', mutationLimiter, expressRequireAdmin, deleteBlobHandler);
-
-// Blob Dispatcher Alias
-router.get('/blob', async (req, res, next) => {
-  if (req.query.action === 'list') {
-    return expressRequireAdmin(req, res, () => listBlobsHandler(req, res, next));
-  }
-  return getBlobHandler(req, res, next);
-});
-router.post('/blob', mutationLimiter, expressRequireAdmin, uploadBlobHandler);
-router.delete('/blob', mutationLimiter, expressRequireAdmin, deleteBlobHandler);
-
-// STAGE 8: Server-authoritative bill calculation & order validation
-router.post('/shop/calculate-bill', mutationLimiter, (req, res) => {
+const calculateBillHandler: express.RequestHandler = (req, res) => {
   const result = validateAndCalculateOrder(req.body);
   if (!result.valid) {
     return res.status(400).json({ error: result.error });
@@ -213,10 +208,116 @@ router.post('/shop/calculate-bill', mutationLimiter, (req, res) => {
     bill: result.bill,
     config: result.config,
   });
+};
+
+// Mount calculate-bill on shopRouter (handles /calculate-bill and /shop/calculate-bill)
+shopRouter.post('/calculate-bill', calculateBillHandler);
+shopRouter.post('/shop/calculate-bill', calculateBillHandler);
+
+// Public catalog routes placeholder / ready for Phase 2
+const catalogHandler: express.RequestHandler = (_req, res) => {
+  return res.json({
+    success: true,
+    catalog: [],
+    message: 'Public catalog route ready for Phase 2',
+  });
+};
+shopRouter.get('/catalog', catalogHandler);
+shopRouter.get('/shop/catalog', catalogHandler);
+
+// Mount public shopRouter with and without /api prefix
+apiApp.use('/api/shop', shopRouter);
+apiApp.use('/shop', shopRouter);
+
+// --- 2. Protected Routes (Strict Firebase ID Token Auth Required) ---
+const protectedRouter = express.Router();
+protectedRouter.use(expressRequireAuth);
+
+// Vercel Blob (Protected & Administrator Only)
+protectedRouter.post('/blob/upload', mutationLimiter, expressRequireAdmin, multerUploadMiddleware, uploadBlobHandler);
+protectedRouter.get('/blob/get', expressRequireAdmin, getBlobHandler);
+protectedRouter.get('/blob/list', expressRequireAdmin, listBlobsHandler);
+protectedRouter.delete('/blob/delete', mutationLimiter, expressRequireAdmin, deleteBlobHandler);
+
+// Blob Dispatcher Alias
+protectedRouter.get('/blob', expressRequireAdmin, async (req, res, next) => {
+  if (req.query.action === 'list') {
+    return listBlobsHandler(req, res, next);
+  }
+  return getBlobHandler(req, res, next);
+});
+protectedRouter.post('/blob', mutationLimiter, expressRequireAdmin, multerUploadMiddleware, uploadBlobHandler);
+protectedRouter.delete('/blob', mutationLimiter, expressRequireAdmin, deleteBlobHandler);
+
+// ==========================================
+// Neon PostgreSQL Orders Management (Stage 7 - Admin Only)
+// ==========================================
+
+// Confirm an order code into the Neon orders database
+protectedRouter.post('/orders/confirm', mutationLimiter, expressRequireAdmin, async (req, res) => {
+  const { orderCode, customerName, config, status } = req.body;
+  const result = await confirmOrder({
+    orderCode,
+    customerName,
+    config,
+    status,
+  });
+
+  if (!result.success) {
+    return res.status(400).json({ error: result.error });
+  }
+
+  return res.json({
+    success: true,
+    order: result.order,
+  });
 });
 
-// Mount router on both root and /api
-apiApp.use('/api', router);
-apiApp.use('/', router);
+// List all confirmed orders (sorted by urgency: paid, pending, shipped, delivered)
+protectedRouter.get('/orders', expressRequireAdmin, async (_req, res) => {
+  const result = await listOrders();
+  if (!result.success) {
+    return res.status(500).json({ error: result.error });
+  }
+  return res.json({
+    success: true,
+    orders: result.orders,
+  });
+});
+
+// Update order fulfillment status
+protectedRouter.patch('/orders/:id/status', mutationLimiter, expressRequireAdmin, async (req, res) => {
+  const orderId = req.params.id;
+  const { status } = req.body;
+  const result = await updateOrderStatus(orderId, status);
+  if (!result.success) {
+    return res.status(400).json({ error: result.error });
+  }
+  return res.json({
+    success: true,
+    order: result.order,
+  });
+});
+
+// Alias for status update via POST
+protectedRouter.post('/orders/status', mutationLimiter, expressRequireAdmin, async (req, res) => {
+  const { id, orderId, status } = req.body;
+  const targetId = id || orderId;
+  if (!targetId) {
+    return res.status(400).json({ error: 'Order ID is required' });
+  }
+  const result = await updateOrderStatus(targetId, status);
+  if (!result.success) {
+    return res.status(400).json({ error: result.error });
+  }
+  return res.json({
+    success: true,
+    order: result.order,
+  });
+});
+
+// Mount protected router on both /api and /
+apiApp.use('/api', protectedRouter);
+apiApp.use('/', protectedRouter);
 
 export default apiApp;
